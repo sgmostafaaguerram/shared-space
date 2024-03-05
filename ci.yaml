@@ -1,15 +1,18 @@
 name: Continuous Integration phase to build and push image to DTR
 on:
   workflow_dispatch:
-
+    inputs:
+      tagVersion:
+        description: 'Tag version to be used for the image'
+        required: true
 jobs:
   build:
     runs-on: [ self-hosted, linux ]
-    # Define environment variables for the job
     env:
-      HOM_DTR_URL: your-dtr-url-here # Replace with your actual DTR URL
-      HOM_DTR_WORKSPACE: your-dtr-workspace-here # Replace with your actual DTR workspace
-      APPLICATION_NAME: your-application-name-here # Replace with your actual application name
+      HOM_DTR_URL: ${{ vars.HOM_DTR_URL }}
+      HOM_DTR_WORKSPACE: ${{ vars.HOM_DTR_WORKSPACE }}
+      APPLICATION_NAME: ${{ vars.APPLICATION_NAME }}
+      TAG_VERSION: ${{ github.event.inputs.tagVersion }}
     steps:
       - name: checkout code
         uses: actions/checkout@v3
@@ -21,20 +24,20 @@ jobs:
           jdk_version: "11.0.20+8"
           maven_version: "3.9.6"
           factory: "CFT"
-          
+
       - name: Build application with maven
         run: mvn clean install package -Dmaven.test.skip=true
 
       - name: Print Docker image version
         run: |
-          echo "Docker image version to be pushed: $HOM_DTR_URL/$HOM_DTR_WORKSPACE/$APPLICATION_NAME:${GITHUB_REF#refs/tags/}"
-          
+          echo "Docker image version to be pushed: $HOM_DTR_URL/$HOM_DTR_WORKSPACE/$APPLICATION_NAME:$TAG_VERSION"
+
       - name: Build and push docker image
         uses: SGitHubActions/build-push-action@stable
         with:
           registry: ${{ env.HOM_DTR_URL }}
           dockerfile-path: acid/Dockerfile
-          tags: ${{ env.HOM_DTR_WORKSPACE }}/${{ env.APPLICATION_NAME }}:${GITHUB_REF#refs/tags/}
+          tags: ${{ env.HOM_DTR_WORKSPACE }}/${{ env.APPLICATION_NAME }}:${{ env.TAG_VERSION }}
         env:
           DOCKER_USER: ${{ secrets.HOM_DOCKER_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.HOM_DOCKER_PASSWORD }}
