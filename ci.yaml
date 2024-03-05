@@ -9,6 +9,10 @@ on:
 jobs:
   build:
     runs-on: [ self-hosted, linux ]
+    env:
+      HOM_DTR_WORKSPACE: ${{ vars.HOM_DTR_WORKSPACE }}
+      HOM_DTR_URL: ${{ vars.HOM_DTR_URL }}
+      APPLICATION_NAME: ${{ vars.APPLICATION_NAME }}
     steps:
       - name: checkout code
         uses: actions/checkout@v3
@@ -22,16 +26,16 @@ jobs:
           factory: "CFT"
       - name: Build application with maven
         run: mvn clean install package -Dmaven.test.skip=true
-
-      - name: Print Docker image version
-        run: echo "Docker image version to be pushed: ${{ env.HOM_DTR_URL }}/${{ env.HOM_DTR_WORKSPACE }}/${{ env.APPLICATION_NAME }}:${GITHUB_REF#refs/tags/}"
+#
+#      - name: Print Docker image version
+#        run: echo "Docker image version to be pushed: $HOM_DTR_URL/$HOM_DTR_WORKSPACE/$APPLICATION_NAME"
 
       - name: Build and push docker image
         uses: SGitHubActions/build-push-action@stable
         with:
-          registry: ${{ env.HOM_DTR_URL }}
+          registry: $HOM_DTR_URL
           dockerfile-path: acid/Dockerfile
-          tags: ${{ env.HOM_DTR_WORKSPACE }}/${{ env.APPLICATION_NAME }}:${GITHUB_REF#refs/tags/}
+          tags: $HOM_DTR_WORKSPACE/$APPLICATION_NAME:${GITHUB_REF#refs/tags/}
         env:
           DOCKER_USER: ${{ secrets.HOM_DOCKER_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.HOM_DOCKER_PASSWORD }}
