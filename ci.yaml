@@ -7,8 +7,10 @@ jobs:
   build:
     runs-on: [ self-hosted, linux ]
     env:
-      HOM_DTR_URL: kube9-dtr-dev.fr.world.socgen
-      HOM_DTR_WORKSPACE: opn-a8759-dev-opnhml
+      # Map your repository variables to the job's environment
+      HOM_DTR_URL: ${{ secrets.HOM_DTR_URL }}
+      HOM_DTR_WORKSPACE: ${{ secrets.HOM_DTR_WORKSPACE }}
+      APPLICATION_NAME: ${{ secrets.APPLICATION_NAME }} # Assuming you've also defined this as a repository variable
     steps:
       - name: checkout code
         uses: actions/checkout@v3
@@ -20,6 +22,9 @@ jobs:
           jdk_version: "11.0.20+8"
           maven_version: "3.9.6"
           factory: "CFT"
+
+      - name: Print Docker image version
+        run: echo "Docker image version to be pushed: $HOM_DTR_URL/$HOM_DTR_WORKSPACE/$APPLICATION_NAME:${GITHUB_REF#refs/tags/}"
 
       - name: Build and push docker image
         uses: SGitHubActions/build-push-action@stable
