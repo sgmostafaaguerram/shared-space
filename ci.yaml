@@ -1,43 +1,58 @@
-name: Continuous Integration phase to build and push image to DTR
+name: '[2- Deploy to Homologation] Continuous Deployment phase to deploy the image to the Kubernetes cluster'
+
 on:
   workflow_dispatch:
     inputs:
       tagVersion:
         description: 'Tag version to be used for the image'
         required: true
+      environment:
+        type: choice
+        description: 'Environment to deploy the image'
+        required: true
+        options:
+          - homologation
+          - production
+
 jobs:
   build:
     runs-on: [ self-hosted, linux ]
     env:
       HOM_DTR_URL: ${{ vars.HOM_DTR_URL }}
       HOM_DTR_WORKSPACE: ${{ vars.HOM_DTR_WORKSPACE }}
+      HOM_NAMESPACE: ns-${{ vars.HOM_DTR_WORKSPACE }}
       APPLICATION_NAME: ${{ vars.APPLICATION_NAME }}
       TAG_VERSION: ${{ github.event.inputs.tagVersion }}
+      ENVIRONMENT: ${{ github.event.inputs.environment }}
     steps:
       - name: checkout code
         uses: actions/checkout@v3
-
-      - name: Set up JDK and Maven
-        uses: SGitHubActions/setup-java-maven@stable
         with:
-          distribution: "temurin"
-          jdk_version: "11.0.20+8"
-          maven_version: "3.9.6"
-          factory: "CFT"
+          ref: ${{ github.event.inputs.tagVersion }}
 
-      - name: Build application with maven
-        run: mvn clean install package -Dmaven.test.skip=true
+      - name: install kubectl
+        uses: SGitHubActions/setup-tools@stable
+        with:
+          tool-kind: 'kubectl'
+          distribution: 'kubectl'
+          tool-version: '1.24.6'
 
-      - name: Print Docker image version
+      - name: Setup kube config for homologation
+        if: env.ENVIRONMENT == 'homologation'
+        uses: SGitHubActions/sgcp-kube-config@stable
+        with:
+          cluster-url: kube9-dev.fr.world.socgen
+          service-account-name: ${{ secrets.HOM_DOCKER_USERNAME }}
+          service-account-password: ${{ secrets.HOM_DOCKER_PASSWORD }}
+
+      - name: Deploy to homologation
         run: |
-          echo "Docker image version to be pushed: $HOM_DTR_URL/$HOM_DTR_WORKSPACE/$APPLICATION_NAME:$TAG_VERSION"
-
-      - name: Build and push docker image
-        uses: SGitHubActions/build-push-action@stable
-        with:
-          registry: ${{ env.HOM_DTR_URL }}
-          dockerfile-path: acid/Dockerfile
-          tags: ${{ env.HOM_DTR_WORKSPACE }}/${{ env.APPLICATION_NAME }}:${{ env.TAG_VERSION }}
-        env:
-          DOCKER_USER: ${{ secrets.HOM_DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.HOM_DOCKER_PASSWORD }}
+          kubectl delete deployment --ignore-not-found=true one-provision-api-hml-deployment --namespace ${{ env.HOM_NAMESPACE }}
+          kubectl apply -f ./acid/K8S/configMaps/hml-application-properties-config-map.yaml --namespace ${{ env.HOM_NAMESPACE }}
+          kubectl apply -f ./acid/K8S/configMaps/filebeat-elastic-hml-config-map.yaml --namespace ${{ env.HOM_NAMESPACE }}
+          kubectl apply -f ./acid/K8S/configMaps/filebeat-logstash-y-flux-hml-config-map.yaml --namespace ${{ env.HOM_NAMESPACE }}
+          sed -i 's/IMAGE_TAG/${{ env.TAG_VERSION }}/g' ./acid/K8S/deployments/hml-deployment.yaml
+          kubectl apply -f ./acid/K8S/deployments/hml-deployment.yaml --namespace ${{ env.HOM_NAMESPACE }}
+          kubectl apply -f ./acid/K8S/service.yaml --namespace ${{ env.HOM_NAMESPACE }}
+          kubectl apply -f ./acid/K8S/ingress/hml-ingress.yaml --namespace ${{ env.HOM_NAMESPACE }}
+          kubectl apply -f ./acid/K8S/hpa.yaml --namespace ${{ env.HOM_NAMESPACE }}
