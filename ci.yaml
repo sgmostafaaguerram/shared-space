@@ -1,4 +1,4 @@
-name: '[2- Deploy to Homologation] Continuous Deployment phase to deploy the image to the Kubernetes cluster'
+name: '[2- Deploy] Continuous Deployment phase to deploy the image to the Kubernetes cluster'
 
 on:
   workflow_dispatch:
@@ -18,9 +18,6 @@ jobs:
   build:
     runs-on: [ self-hosted, linux ]
     env:
-      HOM_DTR_URL: ${{ vars.HOM_DTR_URL }}
-      HOM_DTR_WORKSPACE: ${{ vars.HOM_DTR_WORKSPACE }}
-      HOM_NAMESPACE: ns-${{ vars.HOM_DTR_WORKSPACE }}
       APPLICATION_NAME: ${{ vars.APPLICATION_NAME }}
       TAG_VERSION: ${{ github.event.inputs.tagVersion }}
       ENVIRONMENT: ${{ github.event.inputs.environment }}
@@ -44,15 +41,31 @@ jobs:
           cluster-url: kube9-dev.fr.world.socgen
           service-account-name: ${{ secrets.HOM_DOCKER_USERNAME }}
           service-account-password: ${{ secrets.HOM_DOCKER_PASSWORD }}
+        env:
+          NAMESPACE: ns-${{ vars.HOM_DTR_WORKSPACE }}
+          DTR_URL: ${{ vars.HOM_DTR_URL }}
+          DTR_WORKSPACE: ${{ vars.HOM_DTR_WORKSPACE }}
 
-      - name: Deploy to homologation
+      - name: Setup kube config for production
+        if: env.ENVIRONMENT == 'production'
+        uses: SGitHubActions/sgcp-kube-config@stable
+        with:
+          cluster-url: kube9-prod.fr.world.socgen # Update this to your production cluster URL
+          service-account-name: ${{ secrets.PROD_DOCKER_USERNAME }} # Update this to your production secrets
+          service-account-password: ${{ secrets.PROD_DOCKER_PASSWORD }} # Update this to your production secrets
+        env:
+          NAMESPACE: ns-${{ vars.PROD_DTR_WORKSPACE }} # Update this to your production workspace
+          DTR_URL: ${{ vars.PROD_DTR_URL }} # Update this to your production DTR URL
+          DTR_WORKSPACE: ${{ vars.PROD_DTR_WORKSPACE }} # Update this to your production DTR workspace
+
+      - name: Deploy to environment
         run: |
-          kubectl delete deployment --ignore-not-found=true one-provision-api-hml-deployment --namespace ${{ env.HOM_NAMESPACE }}
-          kubectl apply -f ./acid/K8S/configMaps/hml-application-properties-config-map.yaml --namespace ${{ env.HOM_NAMESPACE }}
-          kubectl apply -f ./acid/K8S/configMaps/filebeat-elastic-hml-config-map.yaml --namespace ${{ env.HOM_NAMESPACE }}
-          kubectl apply -f ./acid/K8S/configMaps/filebeat-logstash-y-flux-hml-config-map.yaml --namespace ${{ env.HOM_NAMESPACE }}
-          sed -i 's/IMAGE_TAG/${{ env.TAG_VERSION }}/g' ./acid/K8S/deployments/hml-deployment.yaml
-          kubectl apply -f ./acid/K8S/deployments/hml-deployment.yaml --namespace ${{ env.HOM_NAMESPACE }}
-          kubectl apply -f ./acid/K8S/service.yaml --namespace ${{ env.HOM_NAMESPACE }}
-          kubectl apply -f ./acid/K8S/ingress/hml-ingress.yaml --namespace ${{ env.HOM_NAMESPACE }}
-          kubectl apply -f ./acid/K8S/hpa.yaml --namespace ${{ env.HOM_NAMESPACE }}
+          kubectl delete deployment --ignore-not-found=true $APPLICATION_NAME-deployment --namespace ${{ env.NAMESPACE }}
+          kubectl apply -f ./acid/K8S/configMaps/$ENVIRONMENT-application-properties-config-map.yaml --namespace ${{ env.NAMESPACE }}
+          kubectl apply -f ./acid/K8S/configMaps/$ENVIRONMENT-filebeat-elastic-config-map.yaml --namespace ${{ env.NAMESPACE }}
+          kubectl apply -f ./acid/K8S/configMaps/$ENVIRONMENT-filebeat-logstash-y-flux-config-map.yaml --namespace ${{ env.NAMESPACE }}
+          sed -i 's/IMAGE_TAG/${{ env.TAG_VERSION }}/g' ./acid/K8S/deployments/$ENVIRONMENT-deployment.yaml
+          kubectl apply -f ./acid/K8S/deployments/$ENVIRONMENT-deployment.yaml --namespace ${{ env.NAMESPACE }}
+          kubectl apply -f ./acid/K8S/service.yaml --namespace ${{ env.NAMESPACE }}
+          kubectl apply -f ./acid/K8S/ingress/$ENVIRONMENT-ingress.yaml --namespace ${{ env.NAMESPACE }}
+          kubectl apply -f ./acid/K8S/hpa.yaml --namespace ${{ env.NAMESPACE }}
