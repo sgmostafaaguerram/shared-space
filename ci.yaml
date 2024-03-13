@@ -16,7 +16,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, linux]
+    runs-on: [ self-hosted, linux ]
     env:
       APPLICATION_NAME: ${{ secrets.APPLICATION_NAME }} # Assuming this is defined in your secrets or replace with actual value
       TAG_VERSION: ${{ github.event.inputs.tagVersion }}
@@ -38,13 +38,13 @@ jobs:
         run: |
           if [[ "${{ env.ENVIRONMENT }}" == "homologation" ]]; then
             echo "NAMESPACE=ns-${{ secrets.HOM_DTR_WORKSPACE }}" >> $GITHUB_ENV
-            echo "CLUSTER_URL=${{ secrets.HOM_CLUSTER_URL }}" >> $GITHUB_ENV
+            echo "CLUSTER_URL=${{ secrets.KUB9_HOM_CLUSTER_HOST }}" >> $GITHUB_ENV
             echo "DOCKER_USERNAME=${{ secrets.HOM_DOCKER_USERNAME }}" >> $GITHUB_ENV
             echo "DOCKER_PASSWORD=${{ secrets.HOM_DOCKER_PASSWORD }}" >> $GITHUB_ENV
             echo "ENV_PREFIX=hml" >> $GITHUB_ENV
           elif [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
             echo "NAMESPACE=ns-${{ secrets.PROD_DTR_WORKSPACE }}" >> $GITHUB_ENV
-            echo "CLUSTER_URL=${{ secrets.PROD_CLUSTER_URL }}" >> $GITHUB_ENV
+            echo "CLUSTER_URL=${{ secrets.PRD_KUBE9_CLUSTER_URL }}" >> $GITHUB_ENV
             echo "DOCKER_USERNAME=${{ secrets.PROD_DOCKER_USERNAME }}" >> $GITHUB_ENV
             echo "DOCKER_PASSWORD=${{ secrets.PROD_DOCKER_PASSWORD }}" >> $GITHUB_ENV
             echo "ENV_PREFIX=prd" >> $GITHUB_ENV
@@ -56,6 +56,10 @@ jobs:
           cluster-url: ${{ env.CLUSTER_URL }}
           service-account-name: ${{ env.DOCKER_USERNAME }}
           service-account-password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Promot image to production
+        if: env.ENVIRONMENT == 'production'
+        run: ./acid/scripts/scan_and_promote.sh ${{ secrets.PROD_DOCKER_USERNAME }} ${{ secrets.PROD_DOCKER_PASSWORD }} ${{ vars.KUB9_HOM_DTR_HOST}}/${{ vars.HOM_DTR_WORKSPACE}}/${{ vars.APPLICATION_NAME }}:${{ env.TAG_VERSION }}
 
       - name: Deploy to environment
         run: |
