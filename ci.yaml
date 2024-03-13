@@ -1,4 +1,4 @@
-name: '[2- Deploy] Continuous Deployment phase to deploy the image to the Kubernetes cluster'
+name: '[2- Deploy] Continuous Deployment to Kubernetes'
 
 on:
   workflow_dispatch:
@@ -15,57 +15,56 @@ on:
           - production
 
 jobs:
-  build:
-    runs-on: [ self-hosted, linux ]
+  deploy:
+    runs-on: [self-hosted, linux]
     env:
-      APPLICATION_NAME: ${{ vars.APPLICATION_NAME }}
+      APPLICATION_NAME: ${{ secrets.APPLICATION_NAME }} # Assuming this is defined in your secrets or replace with actual value
       TAG_VERSION: ${{ github.event.inputs.tagVersion }}
       ENVIRONMENT: ${{ github.event.inputs.environment }}
     steps:
-      - name: checkout code
+      - name: Checkout code
         uses: actions/checkout@v3
         with:
           ref: ${{ github.event.inputs.tagVersion }}
 
-      - name: install kubectl
+      - name: Install kubectl
         uses: SGitHubActions/setup-tools@stable
         with:
           tool-kind: 'kubectl'
           distribution: 'kubectl'
           tool-version: '1.24.6'
 
-      - name: Setup kube config for homologation
-        if: env.ENVIRONMENT == 'homologation'
-        uses: SGitHubActions/sgcp-kube-config@stable
-        with:
-          cluster-url: kube9-dev.fr.world.socgen
-          service-account-name: ${{ secrets.HOM_DOCKER_USERNAME }}
-          service-account-password: ${{ secrets.HOM_DOCKER_PASSWORD }}
-        env:
-          NAMESPACE: ns-${{ vars.HOM_DTR_WORKSPACE }}
-          DTR_URL: ${{ vars.HOM_DTR_URL }}
-          DTR_WORKSPACE: ${{ vars.HOM_DTR_WORKSPACE }}
+      - name: Setup dynamic environment variables
+        run: |
+          if [[ "${{ env.ENVIRONMENT }}" == "homologation" ]]; then
+            echo "NAMESPACE=ns-${{ secrets.HOM_DTR_WORKSPACE }}" >> $GITHUB_ENV
+            echo "CLUSTER_URL=${{ secrets.HOM_CLUSTER_URL }}" >> $GITHUB_ENV
+            echo "DOCKER_USERNAME=${{ secrets.HOM_DOCKER_USERNAME }}" >> $GITHUB_ENV
+            echo "DOCKER_PASSWORD=${{ secrets.HOM_DOCKER_PASSWORD }}" >> $GITHUB_ENV
+            echo "ENV_PREFIX=hml" >> $GITHUB_ENV
+          elif [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
+            echo "NAMESPACE=ns-${{ secrets.PROD_DTR_WORKSPACE }}" >> $GITHUB_ENV
+            echo "CLUSTER_URL=${{ secrets.PROD_CLUSTER_URL }}" >> $GITHUB_ENV
+            echo "DOCKER_USERNAME=${{ secrets.PROD_DOCKER_USERNAME }}" >> $GITHUB_ENV
+            echo "DOCKER_PASSWORD=${{ secrets.PROD_DOCKER_PASSWORD }}" >> $GITHUB_ENV
+            echo "ENV_PREFIX=prd" >> $GITHUB_ENV
+          fi
 
-      - name: Setup kube config for production
-        if: env.ENVIRONMENT == 'production'
+      - name: Setup kube config
         uses: SGitHubActions/sgcp-kube-config@stable
         with:
-          cluster-url: kube9-prod.fr.world.socgen # Update this to your production cluster URL
-          service-account-name: ${{ secrets.PROD_DOCKER_USERNAME }} # Update this to your production secrets
-          service-account-password: ${{ secrets.PROD_DOCKER_PASSWORD }} # Update this to your production secrets
-        env:
-          NAMESPACE: ns-${{ vars.PROD_DTR_WORKSPACE }} # Update this to your production workspace
-          DTR_URL: ${{ vars.PROD_DTR_URL }} # Update this to your production DTR URL
-          DTR_WORKSPACE: ${{ vars.PROD_DTR_WORKSPACE }} # Update this to your production DTR workspace
+          cluster-url: ${{ env.CLUSTER_URL }}
+          service-account-name: ${{ env.DOCKER_USERNAME }}
+          service-account-password: ${{ env.DOCKER_PASSWORD }}
 
       - name: Deploy to environment
         run: |
-          kubectl delete deployment --ignore-not-found=true $APPLICATION_NAME-deployment --namespace ${{ env.NAMESPACE }}
-          kubectl apply -f ./acid/K8S/configMaps/$ENVIRONMENT-application-properties-config-map.yaml --namespace ${{ env.NAMESPACE }}
-          kubectl apply -f ./acid/K8S/configMaps/$ENVIRONMENT-filebeat-elastic-config-map.yaml --namespace ${{ env.NAMESPACE }}
-          kubectl apply -f ./acid/K8S/configMaps/$ENVIRONMENT-filebeat-logstash-y-flux-config-map.yaml --namespace ${{ env.NAMESPACE }}
-          sed -i 's/IMAGE_TAG/${{ env.TAG_VERSION }}/g' ./acid/K8S/deployments/$ENVIRONMENT-deployment.yaml
-          kubectl apply -f ./acid/K8S/deployments/$ENVIRONMENT-deployment.yaml --namespace ${{ env.NAMESPACE }}
+          kubectl delete deployment --ignore-not-found=true ${{ env.APPLICATION_NAME }}-deployment --namespace ${{ env.NAMESPACE }}
+          kubectl apply -f ./acid/K8S/configMaps/${{ env.ENV_PREFIX }}-application-properties-config-map.yaml --namespace ${{ env.NAMESPACE }}
+          kubectl apply -f ./acid/K8S/configMaps/${{ env.ENV_PREFIX }}-filebeat-elastic-config-map.yaml --namespace ${{ env.NAMESPACE }}
+          kubectl apply -f ./acid/K8S/configMaps/${{ env.ENV_PREFIX }}-filebeat-logstash-y-flux-config-map.yaml --namespace ${{ env.NAMESPACE }}
+          sed -i 's/IMAGE_TAG/${{ env.TAG_VERSION }}/g' ./acid/K8S/deployments/${{ env.ENV_PREFIX }}-deployment.yaml
+          kubectl apply -f ./acid/K8S/deployments/${{ env.ENV_PREFIX }}-deployment.yaml --namespace ${{ env.NAMESPACE }}
           kubectl apply -f ./acid/K8S/service.yaml --namespace ${{ env.NAMESPACE }}
-          kubectl apply -f ./acid/K8S/ingress/$ENVIRONMENT-ingress.yaml --namespace ${{ env.NAMESPACE }}
+          kubectl apply -f ./acid/K8S/ingress/${{ env.ENV_PREFIX }}-ingress.yaml --namespace ${{ env.NAMESPACE }}
           kubectl apply -f ./acid/K8S/hpa.yaml --namespace ${{ env.NAMESPACE }}
