@@ -22,12 +22,18 @@ podTemplate(
 ) {
   node(POD_LABEL) {
     stage('Checkout scm') {
-        // Instead of checking out the latest from SCM, check out a specific tag
-        if (git tag -l "$image_tag") {
-          checkout([$class: 'GitSCM', branches: [[name: "refs/tags/$image_tag"]], userRemoteConfigs: scm.userRemoteConfigs])
-        } else {
-          error "Specified tag $image_tag not found, stopping build."
-        }
+        script {
+          // Use 'sh' step with 'returnStdout' to capture the output of the git command
+          def tagExists = sh(script: "git tag -l '$image_tag'", returnStdout: true).trim()
+          
+          if (tagExists) {
+              // If the tag exists, proceed with checkout
+              checkout([$class: 'GitSCM', branches: [[name: "refs/tags/${image_tag}"]], userRemoteConfigs: scm.userRemoteConfigs])
+          } else {
+              // If the tag does not exist, stop the build with an error
+              error "Specified tag ${image_tag} not found, stopping build."
+          }
+      }
     }
 
     stage('Build / Tests') {
