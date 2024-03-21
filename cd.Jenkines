@@ -1,0 +1,88 @@
+image_name = 'one-provision-api'
+
+// Homologation configuration
+hml_dtr_url = 'kube9-dtr-dev.fr.world.socgen'
+hml_workspace = 'opn-a8759-dev-opnhml'
+hml_ucp_url = 'kube9-dev.fr.world.socgen'
+hml_image_full_name = "${hml_dtr_url}/${hml_workspace}/${image_name}"
+
+// Overall configuration
+image_tag = params.IMAGE_TAG
+skip_tests = params.SKIP_TESTS
+activate_sonar = params.ACTIVATE_SONAR
+
+
+podTemplate(
+  inheritFrom: 'jenkins-inbound-agent',
+  containers: [
+    containerTemplate(name: 'docker-container', image: 'kube-dtr-dev.fr.world.socgen/cdl-94999-prd-k8s/docker-client:docker-19.03-kube-1.16', alwaysPullImage: false, ttyEnabled: true, command: 'cat'),
+    containerTemplate(name: 'java-container', image: 'kube9-dtr-dev.fr.world.socgen/byo-ad016-dev-acid/maven-builder:3.9.0-openjdk-11.0.22_7', alwaysPullImage: false, ttyEnabled: true, command: 'cat'),
+    containerTemplate(name: 'sonar-container', image: 'kube9-dtr-dev.fr.world.socgen/byo-ad016-dev-acid/sonar-scanner:4.6.2.2472', alwaysPullImage: false, ttyEnabled: true, command: 'cat')
+  ]
+) {
+  node(POD_LABEL) {
+    stage('Checkout scm') {
+        checkout scm
+    }
+
+    stage('Build / Tests') {
+      container('java-container') {
+        sh """
+        mvn package spring-boot:repackage -Dmaven.test.skip=${skip_tests} -s settings.xml
+        """
+      }
+    }
+
+    stage('SonarQube - Analysis') {
+      withSonarQubeEnv('SONAR_OPN_DSP') {
+        container('sonar-container') {
+          if (activate_sonar ==  true && skip_tests == false) {
+            echo 'running sonar-scanner...'
+            sh "sonar-scanner -Dsonar.projectKey=prj-43b4dc77-55be-432a-8dff-a3b23ef37239-fda-one-provision-api -Dsonar.projectVersion=${image_tag} -Dsonar.host.url=https://cdp-sonar.fr.world.socgen/sonar -Dsonar.branch.name=${GIT_BRANCH} -Dsonar.sources=src/main/java -Dsonar.java.binaries=target/classes"
+          } else {
+            echo 'skipping sonar-scanner...'
+          }
+        }
+      }
+    }
+
+    stage('Quality Gate') {
+      timeout(time: 2, unit: 'MINUTES') {
+        container('sonar-container') {
+          if (activate_sonar ==  true && skip_tests == false) {
+            echo 'waiting quality gate report...'
+            sleep(10)
+            def qg = waitForQualityGate()
+            if (qg.status != 'OK') {
+              error "Pipeline aborted due to quality gate failure: ${qg.status}"
+            }
+          }
+        }
+      }
+    }
+
+    stage('Build Docker Image') {
+      container('docker-container') {
+        withEnv(["DOCKER_HOST=tcp://${hml_ucp_url}:443", 'DOCKER_TLS_VERIFY=1']) {
+          withCredentials([[$class: 'DockerServerCredentialsBinding', credentialsId: 'one-provision-hml-docker-crd', variable: 'DOCKER_CERT_PATH']]) {
+            sh """
+            docker build -t ${hml_image_full_name}:${image_tag} --build-arg VERSION=${image_tag} -f acid/Docker/Dockerfile .
+            """
+          }
+        }
+      }
+    }
+
+    stage('Push Docker Image to DTR homologation') {
+      container('docker-container') {
+        withEnv(["DOCKER_HOST=tcp://${hml_ucp_url}:443", 'DOCKER_TLS_VERIFY=1']) {
+          withCredentials([[$class: 'DockerServerCredentialsBinding', credentialsId: 'one-provision-hml-docker-crd', variable: 'DOCKER_CERT_PATH']]) {
+            sh """
+            docker push ${hml_image_full_name}:${image_tag}
+            """
+          }
+        }
+      }
+    }
+  }
+}
