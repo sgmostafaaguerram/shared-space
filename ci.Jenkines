@@ -22,8 +22,14 @@ podTemplate(
 ) {
   node(POD_LABEL) {
     stage('Pre-Checkout Initialization') {
-        // Ensure the workspace is initialized and up to date with the main branch.
-        checkout([$class: 'GitSCM', branches: [[name: "refs/heads/main"]], userRemoteConfigs: scm.userRemoteConfigs])
+        checkout([$class: 'GitSCM',
+            branches: [[name: 'refs/heads/main']],
+            userRemoteConfigs: [[
+                url: 'YOUR_REPOSITORY_URL',
+                credentialsId: 'YOUR_CREDENTIALS_ID' // Optional: if authentication is required
+            ]]
+        ])
+
     }
     stage('Checkout scm') {
         script {
