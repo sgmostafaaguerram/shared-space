@@ -21,6 +21,11 @@ podTemplate(
   ]
 ) {
   node(POD_LABEL) {
+    stage('Pre-Checkout Initialization') {
+        // This is a minimal checkout to ensure the workspace is a Git repo.
+        // Adjust this as needed; it might not be necessary if the workspace is already initialized.
+        checkout scm
+    }
     stage('Checkout scm') {
         script {
           // Use 'sh' step with 'returnStdout' to capture the output of the git command
