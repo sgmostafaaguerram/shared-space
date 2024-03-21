@@ -25,7 +25,7 @@ podTemplate(
         checkout([$class: 'GitSCM',
             branches: [[name: 'refs/heads/main']],
             userRemoteConfigs: [[
-                url: 'YOUR_REPOSITORY_URL',
+                url: 'https://sgithub.fr.world.socgen/fda/one-provision-api.git',
                 credentialsId: 'YOUR_CREDENTIALS_ID' // Optional: if authentication is required
             ]]
         ])
