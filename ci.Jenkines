@@ -22,7 +22,12 @@ podTemplate(
 ) {
   node(POD_LABEL) {
     stage('Checkout scm') {
-        checkout scm
+        // Instead of checking out the latest from SCM, check out a specific tag
+        if (git tag -l "$image_tag") {
+          checkout([$class: 'GitSCM', branches: [[name: "refs/tags/$image_tag"]], userRemoteConfigs: scm.userRemoteConfigs])
+        } else {
+          error "Specified tag $image_tag not found, stopping build."
+        }
     }
 
     stage('Build / Tests') {
