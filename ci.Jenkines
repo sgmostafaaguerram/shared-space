@@ -22,9 +22,8 @@ podTemplate(
 ) {
   node(POD_LABEL) {
     stage('Pre-Checkout Initialization') {
-        // This is a minimal checkout to ensure the workspace is a Git repo.
-        // Adjust this as needed; it might not be necessary if the workspace is already initialized.
-        checkout scm
+        // Ensure the workspace is initialized and up to date with the main branch.
+        checkout([$class: 'GitSCM', branches: [[name: "refs/heads/main"]], userRemoteConfigs: scm.userRemoteConfigs])
     }
     stage('Checkout scm') {
         script {
