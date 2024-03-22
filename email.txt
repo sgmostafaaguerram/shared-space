@@ -1,0 +1,11 @@
+Objet : Exemption de la migration vers les ordinateurs Nova
+
+Bonjour [Nom du destinataire],
+
+Suite à l'annonce de la migration vers les nouveaux ordinateurs Nova, je souhaite demander à conserver mon ordinateur actuel. Le modèle Nova ne supporte pas Visual Studio Code, l'IDE crucial pour mes tâches.
+
+Je vous remercie de prendre en compte cette demande.
+
+Cordialement,
+
+[Votre Nom]
